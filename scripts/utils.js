@@ -1,3 +1,5 @@
 function log(...args) {
-    console.log(...args);
+    if (this.debug){
+        console.log(...args);
+    }    
 }
