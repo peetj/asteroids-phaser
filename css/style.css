@@ -16,6 +16,10 @@ body {
     margin:0;
 }
 
+h1 {
+    font-size: 3em;
+}
+
 img,
 video {
     max-width: 100%;
