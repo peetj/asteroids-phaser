@@ -1,3 +1,5 @@
+let player = null;
+
 var config = {
     type: Phaser.AUTO,
     width: 800,
@@ -15,17 +17,27 @@ var config = {
         update: update
     }
 };
-
 var game = new Phaser.Game(config);
 
 function preload () {
     // Load assets here
+    this.load.image('player', '/images/ship.png');
 }
 
 function create () {
     // Create game objects here
+    player = this.add.image(400,300,'player');
+
+    // Enable keyboard input
+    this.cursors = this.input.keyboard.createCursorKeys();
 }
 
 function update () {
-    // Game logic goes here
+    // Update game information, object states...etc
+    if(this.cursors.left.isDown){
+        player.angle -= 1;
+    }
+    else if(this.cursors.right.isDown){
+        player.angle += 1;
+    }
 }
