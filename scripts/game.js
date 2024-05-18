@@ -41,20 +41,18 @@ function create () {
     player = this.add.graphics({ lineStyle: { width: 2, color: 0xffffff } });
     drawShip(player);
     playerContainer.add(player);
-    // Enable physics on the container
     this.physics.world.enable(playerContainer);
-    playerContainer.body.setDamping(true);
-    playerContainer.body.setDrag(0.9);
     playerContainer.body.setMaxVelocity(200);
 
     // Enable keyboard input
     this.cursors = this.input.keyboard.createCursorKeys();
-    key_spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
-    key_spacebar.on('down', ()=> {
-        fire.call(this)
-    });
+    this.spacebar = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
 
-    this.bullets = this.physics.add.group();
+    this.bullets = this.physics.add.group({
+        classType: Phaser.GameObjects.Graphics,
+        maxSize: 4, // limit to 4 bullets
+        runChildUpdate: true
+    });
 
     // Sounds
     this.fire_snd = this.sound.add('fire', { volume: 0.5, loop: false });
@@ -67,51 +65,79 @@ function create () {
     //drawAsteroid(this.add.graphics(), 400, 100);
 }
 
-function update () {
+function update() {
+
+    let thrusting = false;
+
     // Handle rotation
     if (this.cursors.left.isDown) {
         playerContainer.body.setAngularVelocity(-150); // Rotate left
     } else if (this.cursors.right.isDown) {
         playerContainer.body.setAngularVelocity(150); // Rotate right
     }
-    else if(this.cursors.up.isDown){
-       // Calculate acceleration vector based on player's current angle
-       const acceleration = this.physics.velocityFromAngle( playerContainer.body.angle, 100);
-        playerContainer.body.acceleration.set(acceleration.x, acceleration.y);
-        this.thrust_snd.play();
-    }
-    else if(this.cursors.down.isDown){
-        // Apply reverse thrust
-        const acceleration = this.physics.velocityFromAngle(player.angle, -100);
-        player.body2.acceleration.set(acceleration.x, acceleration.y);
-    }
     else {
-        //player.body.acceleration.set(0, 0);
-        //player.setTexture('player');
         playerContainer.body.setAngularVelocity(0);
     }
 
-    this.bullets.children.iterate((bullet)=>{
-        if(!bullet) return;
-        if(bullet.x < 0 || bullet.x > this.sys.game.config.width || bullet.y < 0 || bullet.y > this.sys.game.config.height){
-            bullet.destroy();
+    // Handle thrust
+    if (this.cursors.up.isDown) {
+        thrusting = true;
+        this.physics.velocityFromRotation(playerContainer.rotation - Phaser.Math.DegToRad(90), 200, playerContainer.body.acceleration);
+    } else if (this.cursors.down.isDown) {
+        this.physics.velocityFromRotation(playerContainer.rotation + Phaser.Math.DegToRad(90), 100, playerContainer.body.acceleration);
+    }
+    else {
+        playerContainer.body.setAcceleration(0, 0);
+
+        // Apply manual deceleration
+        const deceleration = 0.25;
+        if (playerContainer.body.velocity.length() > 0) {
+            playerContainer.body.velocity.scale(1 - deceleration / playerContainer.body.velocity.length());
         }
-    }); // pass 'this' context to the callback
+    }
 
-    this.physics.world.wrap(player,0);
+    // Redraw the ship with or without thrust tail
+    drawShip(playerContainer.list[0], thrusting);
 
+    // Handle shooting
+    if (Phaser.Input.Keyboard.JustDown(this.spacebar)) {
+        fire.call(this);
+    }
+
+    // Reuse bullets that go offscreen
+    this.bullets.children.each((bullet) => {
+        if (bullet.active && (bullet.x < 0 || bullet.x > this.physics.world.bounds.width || bullet.y < 0 || bullet.y > this.physics.world.bounds.height)) {
+            bullet.setActive(false);
+            bullet.setVisible(false);
+        }
+    });
+
+    this.physics.world.wrap(playerContainer,0);
 }
 
 function fire() {
-    if(this.bullets.getChildren().length < 4) {
-        // Calculate the tip of the ship
-        const tipPosition = getTipPosition(player, 10); // adjust 30 to the correct distance from center to tip
-        // Create a bullet at the tip position
-        var bullet = this.bullets.create(tipPosition.x, tipPosition.y, 'bullet');
-        this.physics.velocityFromAngle(player.angle, 200, bullet.body.velocity); // adjust 200 to desired bullet speed
+    let bullet = this.bullets.get();
+
+    if (bullet) {
+        bullet.setActive(true);
+        bullet.setVisible(true);
+
+        // Draw the bullet as a simple vector line
+        bullet.clear();
+        bullet.lineStyle(2, 0xffffff, 0.8);
+        bullet.beginPath();
+        bullet.moveTo(0, 0);
+        bullet.lineTo(0, 2); // Bullet length
+        bullet.strokePath();
+
+        // Position the bullet at the top middle of the ship
+        const bulletOffset = this.physics.velocityFromRotation(playerContainer.rotation - Phaser.Math.DegToRad(90), 12);
+        bullet.setPosition(playerContainer.x + bulletOffset.x, playerContainer.y + bulletOffset.y);
+
+        // Set the bullet velocity in the direction of the ship's rotation
+        this.physics.velocityFromRotation(playerContainer.rotation - Phaser.Math.DegToRad(90), 250, bullet.body.velocity);
         this.fire_snd.play();
     }
-
 }
 
 function getTipPosition(ship, distanceFromCenter) {
@@ -137,7 +163,7 @@ function createStarfield() {
     }
 }
 
-function drawShip(graphics) {
+function drawShip(graphics, thrusting = false) {
     graphics.clear();
     graphics.lineStyle(2, 0xffffff, 0.6);
     graphics.beginPath();
@@ -146,8 +172,21 @@ function drawShip(graphics) {
     graphics.lineTo(4, 4);    // Inner right
     graphics.lineTo(-4, 4);   // Inner left
     graphics.lineTo(-10, 12); // Bottom left of the A
+    graphics.lineTo(0, -12);  // Top left to top
     graphics.closePath();
     graphics.strokePath();
+
+    // Draw thrust tail if thrusting
+    if (thrusting) {
+        graphics.fillStyle(0xffffff, 0.7); // Solid white fill for thrust
+        graphics.beginPath();
+        graphics.moveTo(-4, 4);
+        graphics.lineTo(0, 8); // Smaller tail middle
+        graphics.lineTo(4, 4);
+        graphics.lineTo(-4, 4); // Close the thrust triangle
+        graphics.closePath();
+        graphics.fillPath();
+    }
 }
 
 function drawAsteroid(graphics, centerX, centerY) {
