@@ -1,5 +1,6 @@
 this.player = null;
 this.debug = true;
+var playerContainer;
 
 var config = {
     type: Phaser.AUTO,
@@ -22,21 +23,29 @@ var game = new Phaser.Game(config);
 
 function preload () {
     // Load image assets here
-    this.load.image('player', '/images/ship.png');
     this.load.image('bullet', '/images/bullet.png');
 
     // Load sound assets here
     this.load.audio('fire', 'sounds/fire.wav');
+    this.load.audio('thrust', 'sounds/thrust.wav');
 }
 
 function create () {
-    this.physics.world.setBounds(0,0,800,600);
+    this.physics.world.setBounds(0, 0, 800, 600);
 
-    // Create game objects here
-    player = this.physics.add.sprite(400, 300, 'player');
-    player.setDamping(true);  // This smooths out the stopping behavior when thrust is no longer applied.
-    player.setDrag(0.9);     // Drag affects the deceleration, making the ship slow down gradually.
-    player.setMaxVelocity(200);  // Limits the maximum speed to prevent the sprite from becoming uncontrollable.
+        // Create ship container to hold the graphics
+    playerContainer = this.add.container(400, 300);
+    playerContainer.setSize(30, 30); // Set the size of the container
+
+    // Create ship using Graphics
+    player = this.add.graphics({ lineStyle: { width: 2, color: 0xffffff } });
+    drawShip(player);
+    playerContainer.add(player);
+    // Enable physics on the container
+    this.physics.world.enable(playerContainer);
+    playerContainer.body.setDamping(true);
+    playerContainer.body.setDrag(0.9);
+    playerContainer.body.setMaxVelocity(200);
 
     // Enable keyboard input
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -49,28 +58,37 @@ function create () {
 
     // Sounds
     this.fire_snd = this.sound.add('fire', { volume: 0.5, loop: false });
+    this.thrust_snd = this.sound.add('thrust', { volume: 0.1, loop: false });
+
+    // Starfield
+    createStarfield.call(this);
+
+    // TEST
+    //drawAsteroid(this.add.graphics(), 400, 100);
 }
 
 function update () {
-    // Update game information, object states...etc
-    if(this.cursors.left.isDown){
-        player.angle -= 2;
-    }
-    else if(this.cursors.right.isDown){
-        player.angle += 2;
+    // Handle rotation
+    if (this.cursors.left.isDown) {
+        playerContainer.body.setAngularVelocity(-150); // Rotate left
+    } else if (this.cursors.right.isDown) {
+        playerContainer.body.setAngularVelocity(150); // Rotate right
     }
     else if(this.cursors.up.isDown){
        // Calculate acceleration vector based on player's current angle
-       const acceleration = this.physics.velocityFromAngle(player.angle, 100);
-       player.body.acceleration.set(acceleration.x, acceleration.y);
+       const acceleration = this.physics.velocityFromAngle( playerContainer.body.angle, 100);
+        playerContainer.body.acceleration.set(acceleration.x, acceleration.y);
+        this.thrust_snd.play();
     }
     else if(this.cursors.down.isDown){
         // Apply reverse thrust
         const acceleration = this.physics.velocityFromAngle(player.angle, -100);
-        player.body.acceleration.set(acceleration.x, acceleration.y);
+        player.body2.acceleration.set(acceleration.x, acceleration.y);
     }
     else {
-        player.body.acceleration.set(0,0);
+        //player.body.acceleration.set(0, 0);
+        //player.setTexture('player');
+        playerContainer.body.setAngularVelocity(0);
     }
 
     this.bullets.children.iterate((bullet)=>{
@@ -93,9 +111,8 @@ function fire() {
         this.physics.velocityFromAngle(player.angle, 200, bullet.body.velocity); // adjust 200 to desired bullet speed
         this.fire_snd.play();
     }
-     
-}
 
+}
 
 function getTipPosition(ship, distanceFromCenter) {
     const radians = Phaser.Math.DegToRad(ship.angle);
@@ -103,4 +120,61 @@ function getTipPosition(ship, distanceFromCenter) {
         x: ship.x + distanceFromCenter * Math.cos(radians),
         y: ship.y + distanceFromCenter * Math.sin(radians)
     };
+}
+
+function createStarfield() {
+    // Create a Graphics object
+    let graphics = this.add.graphics();
+
+    // Generate stars
+    for (let i = 0; i<100; i++) {
+        let x = Phaser.Math.Between(0, 800);
+        let y = Phaser.Math.Between(0, 600);
+        let alpha = Phaser.Math.FloatBetween(0.3, 0.6);
+        let size = Phaser.Math.Between(1, 2); // Randomize star size
+        graphics.fillStyle(0xffffff, alpha);
+        graphics.fillRect(x, y, size, size);
+    }
+}
+
+function drawShip(graphics) {
+    graphics.clear();
+    graphics.lineStyle(2, 0xffffff, 0.6);
+    graphics.beginPath();
+    graphics.moveTo(0, -12);  // Top of the A
+    graphics.lineTo(10, 12);  // Bottom right of the A
+    graphics.lineTo(4, 4);    // Inner right
+    graphics.lineTo(-4, 4);   // Inner left
+    graphics.lineTo(-10, 12); // Bottom left of the A
+    graphics.closePath();
+    graphics.strokePath();
+}
+
+function drawAsteroid(graphics, centerX, centerY) {
+    // Define the vertices of the asteroid shape
+    let vertices = [
+        { x: 30, y: 0 },
+        { x: 60, y: 20 },
+        { x: 70, y: 50 },
+        { x: 50, y: 70 },
+        { x: 20, y: 80 },
+        { x: -10, y: 70 },
+        { x: -30, y: 40 },
+        { x: -20, y: 10 },
+        { x: 0, y: -10 }
+    ];
+
+    // Move to the first vertex
+    graphics.lineStyle(2, 0xffffff, 0.6);
+    graphics.beginPath();
+    graphics.moveTo(vertices[0].x + centerX, vertices[0].y + centerY);
+
+    // Draw lines to each subsequent vertex
+    for (let i = 1; i<vertices.length; i++) {
+        graphics.lineTo(vertices[i].x + centerX, vertices[i].y + centerY);
+    }
+
+    // Close the shape by connecting the last vertex to the first
+    graphics.closePath();
+    graphics.strokePath();
 }
