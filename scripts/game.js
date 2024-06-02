@@ -1,6 +1,4 @@
-this.player = null;
 this.debug = true;
-var playerContainer;
 
 var config = {
     type: Phaser.AUTO,
@@ -22,6 +20,9 @@ var config = {
 var game = new Phaser.Game(config);
 
 function preload () {
+     // Load the texture atlas
+    this.load.atlas('shipPieces', 'images/asteroids-sprites.png', 'images/asteroids-sprites.json');
+
     // Load image assets here
     this.load.image('bullet', '/images/bullet.png');
 
@@ -30,19 +31,20 @@ function preload () {
     this.load.audio('thrust', 'sounds/thrust.wav');
 }
 
+
 function create () {
     this.physics.world.setBounds(0, 0, 800, 600);
 
         // Create ship container to hold the graphics
-    playerContainer = this.add.container(400, 300);
-    playerContainer.setSize(30, 30); // Set the size of the container
+    this.playerContainer = this.add.container(400, 300);
+    this.playerContainer.setSize(30, 30); // Set the size of the container
 
     // Create ship using Graphics
-    player = this.add.graphics({ lineStyle: { width: 2, color: 0xffffff } });
-    drawShip(player);
-    playerContainer.add(player);
-    this.physics.world.enable(playerContainer);
-    playerContainer.body.setMaxVelocity(200);
+    this.player = this.add.graphics({ lineStyle: { width: 2, color: 0xffffff } });
+    drawShip(this.player);
+    this.playerContainer.add(this.player);
+    this.physics.world.enable(this.playerContainer);
+    this.playerContainer.body.setMaxVelocity(200);
 
     // Enable keyboard input
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -71,33 +73,33 @@ function update() {
 
     // Handle rotation
     if (this.cursors.left.isDown) {
-        playerContainer.body.setAngularVelocity(-150); // Rotate left
+        this.playerContainer.body.setAngularVelocity(-150); // Rotate left
     } else if (this.cursors.right.isDown) {
-        playerContainer.body.setAngularVelocity(150); // Rotate right
+        this.playerContainer.body.setAngularVelocity(150); // Rotate right
     }
     else {
-        playerContainer.body.setAngularVelocity(0);
+        this.playerContainer.body.setAngularVelocity(0);
     }
 
     // Handle thrust
     if (this.cursors.up.isDown) {
         thrusting = true;
-        this.physics.velocityFromRotation(playerContainer.rotation - Phaser.Math.DegToRad(90), 200, playerContainer.body.acceleration);
+        this.physics.velocityFromRotation(this.playerContainer.rotation - Phaser.Math.DegToRad(90), 200, this.playerContainer.body.acceleration);
     } else if (this.cursors.down.isDown) {
-        this.physics.velocityFromRotation(playerContainer.rotation + Phaser.Math.DegToRad(90), 100, playerContainer.body.acceleration);
+        this.physics.velocityFromRotation(this.playerContainer.rotation + Phaser.Math.DegToRad(90), 100, this.playerContainer.body.acceleration);
     }
     else {
-        playerContainer.body.setAcceleration(0, 0);
+        this.playerContainer.body.setAcceleration(0, 0);
 
         // Apply manual deceleration
-        const deceleration = 0.25;
-        if (playerContainer.body.velocity.length() > 0) {
-            playerContainer.body.velocity.scale(1 - deceleration / playerContainer.body.velocity.length());
+        const friction = 0.25;
+        if (this.playerContainer.body.velocity.length() > 0) {
+            this.playerContainer.body.velocity.scale(1 - friction / this.playerContainer.body.velocity.length());
         }
     }
 
     // Redraw the ship with or without thrust tail
-    drawShip(playerContainer.list[0], thrusting);
+    drawShip(this.playerContainer.list[0], thrusting);
 
     // Handle shooting
     if (Phaser.Input.Keyboard.JustDown(this.spacebar)) {
@@ -112,7 +114,7 @@ function update() {
         }
     });
 
-    this.physics.world.wrap(playerContainer,0);
+    this.physics.world.wrap(this.playerContainer,0);
 }
 
 function fire() {
@@ -131,11 +133,11 @@ function fire() {
         bullet.strokePath();
 
         // Position the bullet at the top middle of the ship
-        const bulletOffset = this.physics.velocityFromRotation(playerContainer.rotation - Phaser.Math.DegToRad(90), 12);
-        bullet.setPosition(playerContainer.x + bulletOffset.x, playerContainer.y + bulletOffset.y);
+        const bulletOffset = this.physics.velocityFromRotation(this.playerContainer.rotation - Phaser.Math.DegToRad(90), 12);
+        bullet.setPosition(this.playerContainer.x + bulletOffset.x, this.playerContainer.y + bulletOffset.y);
 
         // Set the bullet velocity in the direction of the ship's rotation
-        this.physics.velocityFromRotation(playerContainer.rotation - Phaser.Math.DegToRad(90), 250, bullet.body.velocity);
+        this.physics.velocityFromRotation(this.playerContainer.rotation - Phaser.Math.DegToRad(90), 250, bullet.body.velocity);
         this.fire_snd.play();
     }
 }
@@ -187,6 +189,46 @@ function drawShip(graphics, thrusting = false) {
         graphics.closePath();
         graphics.fillPath();
     }
+}
+
+function shipHit(ship) {
+    this.explodeShip(ship);
+}
+
+function explodeShip(ship) {
+    // Hide the original ship
+    ship.list[0].setVisible(false);
+
+    // Define the pieces
+    const pieces = [
+        this.createPiece(this, ship.x, ship.y, 'ship_piece_01'),
+        this.createPiece(this, ship.x, ship.y, 'ship_piece_02'),
+        this.createPiece(this, ship.x, ship.y, 'ship_piece_03'),
+        this.createPiece(this, ship.x, ship.y, 'ship_piece_04'),
+        this.createPiece(this, ship.x, ship.y, 'ship_piece_05')
+    ];
+
+    // Add pieces to the scene and animate them
+    pieces.forEach(piece => {
+        // Set initial velocity for each piece
+        const angle = Phaser.Math.Between(0, 360);
+        const speed = Phaser.Math.Between(50, 100); // Adjust as needed
+        this.physics.velocityFromRotation(angle, speed, piece.body.velocity);
+
+        // Optionally, add fade-out or other effects
+        this.tweens.add({
+            targets: piece,
+            alpha: 0,
+            duration: 1000,
+            onComplete: () => piece.destroy(),
+        });
+    });
+}
+
+function createPiece(scene, x, y, frame) {
+    const piece = scene.physics.add.sprite(x, y, 'shipPieces', frame);
+    piece.setOrigin(0.5);
+    return piece;
 }
 
 function drawAsteroid(graphics, centerX, centerY) {
